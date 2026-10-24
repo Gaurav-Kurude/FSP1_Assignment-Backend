@@ -13,11 +13,12 @@ const Team = require("./models/team.models");
 const User = require("./models/user.models");
 
 const app = express();
-app.use(
-  cors({
-    origin: "http://localhost:5173",
-  }),
-);
+app.use(cors({
+  origin: [
+    "http://localhost:5173",
+    "https://fsp-1-assignment-backend-plum.vercel.app/"
+  ]
+}));
 app.use(express.json());
 
 // ====================================
