@@ -21,7 +21,7 @@ app.use(
     ],
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
-  })
+  }),
 );
 app.use(express.json());
 
@@ -689,6 +689,136 @@ app.get("/projects", authenticateToken, async (req, res) => {
     return res.status(500).json({
       message: "Internal server error.",
     });
+  }
+});
+
+// ====================================
+// GET ONE PROJECT BY ID
+// ====================================
+app.get("/projects/:id", authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!/^[a-f\d]{24}$/i.test(id)) {
+      return res.status(400).json({ message: "Invalid project ID." });
+    }
+
+    const project = await Project.findById(id);
+
+    if (!project) {
+      return res.status(404).json({ message: "Project not found." });
+    }
+
+    return res.status(200).json({ project });
+  } catch (error) {
+    console.error("Fetch project error:", error.message);
+    return res.status(500).json({ message: "Internal server error." });
+  }
+});
+
+// ====================================
+// UPDATE PROJECT
+// ====================================
+app.put("/projects/:id", authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, description } = req.body;
+
+    if (!/^[a-f\d]{24}$/i.test(id)) {
+      return res.status(400).json({ message: "Invalid project ID." });
+    }
+
+    const fields = Object.keys(req.body);
+
+    if (
+      fields.length === 0 ||
+      fields.some((field) => !["name", "description"].includes(field))
+    ) {
+      return res.status(400).json({
+        message: "Only name and description can be updated.",
+      });
+    }
+
+    if (name !== undefined && (typeof name !== "string" || !name.trim())) {
+      return res.status(400).json({
+        message: "Project name cannot be empty.",
+      });
+    }
+
+    if (description !== undefined && typeof description !== "string") {
+      return res.status(400).json({
+        message: "Description must be a string.",
+      });
+    }
+
+    const updates = {};
+
+    if (name !== undefined) updates.name = name.trim();
+    if (description !== undefined) {
+      updates.description = description.trim();
+    }
+
+    const project = await Project.findByIdAndUpdate(id, updates, {
+      new: true,
+      runValidators: true,
+    });
+
+    if (!project) {
+      return res.status(404).json({ message: "Project not found." });
+    }
+
+    return res.status(200).json({
+      message: "Project updated successfully.",
+      project,
+    });
+  } catch (error) {
+    if (error.code === 11000) {
+      return res.status(409).json({
+        message: "A project with this name already exists.",
+      });
+    }
+
+    console.error("Update project error:", error.message);
+    return res.status(500).json({ message: "Internal server error." });
+  }
+});
+
+// ====================================
+// DELETE PROJECT
+// ====================================
+app.delete("/projects/:id", authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!/^[a-f\d]{24}$/i.test(id)) {
+      return res.status(400).json({ message: "Invalid project ID." });
+    }
+
+    const project = await Project.findById(id);
+
+    if (!project) {
+      return res.status(404).json({ message: "Project not found." });
+    }
+
+    // Do not delete a project that still has associated tasks.
+    const hasTasks = await Task.exists({ project: id });
+
+    if (hasTasks) {
+      return res.status(409).json({
+        message:
+          "This project has tasks. Reassign or delete those tasks before deleting the project.",
+      });
+    }
+
+    await Project.findByIdAndDelete(id);
+
+    return res.status(200).json({
+      message: "Project deleted successfully.",
+      project,
+    });
+  } catch (error) {
+    console.error("Delete project error:", error.message);
+    return res.status(500).json({ message: "Internal server error." });
   }
 });
 
