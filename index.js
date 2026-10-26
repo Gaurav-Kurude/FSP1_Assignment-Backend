@@ -929,6 +929,24 @@ app.get("/teams", authenticateToken, async (req, res) => {
   }
 });
 
+// Get all users for task assignment
+app.get("/users", authenticateToken, async (req, res) => {
+  try {
+    const users = await User.find().select("_id name email");
+
+    res.status(200).json({
+      count: users.length,
+      users,
+    });
+  } catch (error) {
+    console.error("Fetch users error:", error);
+
+    res.status(500).json({
+      message: "Failed to fetch users.",
+    });
+  }
+});
+
 // Get tasks completed in the last week
 app.get("/report/last-week", authenticateToken, async (req, res) => {
   try {
