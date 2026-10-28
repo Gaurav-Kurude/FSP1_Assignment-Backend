@@ -245,8 +245,16 @@ app.get("/auth/me", authenticateToken, async (req, res) => {
 
 app.post("/tasks", authenticateToken, async (req, res) => {
   try {
-    const { name, project, team, owners, tags, timeToComplete, status } =
-      req.body;
+    const {
+      name,
+      project,
+      team,
+      owners,
+      tags,
+      timeToComplete,
+      status,
+      dueDate,
+    } = req.body;
 
     // 1. Validate required fields
     if (
@@ -282,7 +290,20 @@ app.post("/tasks", authenticateToken, async (req, res) => {
       });
     }
 
-    // 3. Check that related records exist
+    // 3. Validate due date if provided
+    let parsedDueDate = null;
+
+    if (dueDate !== undefined && dueDate !== null && dueDate !== "") {
+      parsedDueDate = new Date(dueDate);
+
+      if (Number.isNaN(parsedDueDate.getTime())) {
+        return res.status(400).json({
+          message: "Please provide a valid due date.",
+        });
+      }
+    }
+
+    // 4. Check that related records exist
     const [projectExists, teamExists, existingOwners, existingTags] =
       await Promise.all([
         Project.findById(project),
@@ -315,7 +336,7 @@ app.post("/tasks", authenticateToken, async (req, res) => {
       });
     }
 
-    // 4. Create the task
+    // 5. Create the task, including its due date
     const newTask = await Task.create({
       name: name.trim(),
       project,
@@ -324,9 +345,10 @@ app.post("/tasks", authenticateToken, async (req, res) => {
       tags,
       timeToComplete,
       status: status.trim(),
+      dueDate: parsedDueDate,
     });
 
-    // 5. Return the created task
+    // 6. Return the created task
     return res.status(201).json({
       message: "Task created successfully.",
       task: newTask,
@@ -469,14 +491,18 @@ app.post("/tasks/:id", authenticateToken, async (req, res) => {
 
     // 1. Validate task ID
     if (!/^[a-f\d]{24}$/i.test(id)) {
-      return res.status(400).json({ message: "Invalid task ID." });
+      return res.status(400).json({
+        message: "Invalid task ID.",
+      });
     }
 
     // 2. Find the existing task
     const task = await Task.findById(id);
 
     if (!task) {
-      return res.status(404).json({ message: "Task not found." });
+      return res.status(404).json({
+        message: "Task not found.",
+      });
     }
 
     // 3. Allow only these fields to be updated
@@ -488,6 +514,7 @@ app.post("/tasks/:id", authenticateToken, async (req, res) => {
       "tags",
       "timeToComplete",
       "status",
+      "dueDate",
     ];
 
     const fields = Object.keys(req.body);
@@ -501,8 +528,16 @@ app.post("/tasks/:id", authenticateToken, async (req, res) => {
       });
     }
 
-    const { name, project, team, owners, tags, timeToComplete, status } =
-      req.body;
+    const {
+      name,
+      project,
+      team,
+      owners,
+      tags,
+      timeToComplete,
+      status,
+      dueDate,
+    } = req.body;
 
     // 4. Validate individual fields
     if (name !== undefined && (typeof name !== "string" || !name.trim())) {
@@ -529,7 +564,23 @@ app.post("/tasks/:id", authenticateToken, async (req, res) => {
       });
     }
 
-    // 5. Validate related documents if their IDs are updated
+    // 5. Validate due date
+    if (dueDate !== undefined && dueDate !== null && dueDate !== "") {
+      const parsedDueDate = new Date(dueDate);
+
+      if (Number.isNaN(parsedDueDate.getTime())) {
+        return res.status(400).json({
+          message: "Please provide a valid due date.",
+        });
+      }
+
+      task.dueDate = parsedDueDate;
+    } else if (dueDate !== undefined) {
+      // Allow the user to clear the due date
+      task.dueDate = null;
+    }
+
+    // 6. Validate related documents if their IDs are updated
     const isValidId = (value) =>
       typeof value === "string" && /^[a-f\d]{24}$/i.test(value);
 
@@ -556,7 +607,9 @@ app.post("/tasks/:id", authenticateToken, async (req, res) => {
         });
       }
 
-      const users = await User.find({ _id: { $in: owners } });
+      const users = await User.find({
+        _id: { $in: owners },
+      }).select("_id");
 
       if (users.length !== new Set(owners).size) {
         return res.status(400).json({
@@ -572,7 +625,9 @@ app.post("/tasks/:id", authenticateToken, async (req, res) => {
         });
       }
 
-      const existingTags = await Tag.find({ _id: { $in: tags } });
+      const existingTags = await Tag.find({
+        _id: { $in: tags },
+      }).select("_id");
 
       if (existingTags.length !== new Set(tags).size) {
         return res.status(400).json({
@@ -581,19 +636,24 @@ app.post("/tasks/:id", authenticateToken, async (req, res) => {
       }
     }
 
-    // 6. Update only the fields sent in the request
+    // 7. Update only the fields sent in the request
     for (const field of fields) {
+      if (field === "dueDate") {
+        continue; // Already validated and assigned above
+      }
+
       task[field] = field === "name" ? name.trim() : req.body[field];
     }
 
-    // 7. Save the updated task
+    // 8. Save the updated task
     await task.save();
 
-    // 8. Return the updated task with related details
+    // 9. Return the updated task with related details
     const updatedTask = await Task.findById(task._id)
       .populate("project", "name")
       .populate("team", "name")
-      .populate("owners", "name email");
+      .populate("owners", "name email")
+      .populate("tags", "name");
 
     return res.status(200).json({
       message: "Task updated successfully.",
