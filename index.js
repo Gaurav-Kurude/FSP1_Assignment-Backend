@@ -100,6 +100,13 @@ app.post("/auth/signup", async (req, res) => {
     const normalizedName = name.trim();
     const normalizedEmail = email.trim().toLowerCase();
 
+    // Validate email must end with .com
+    if (!normalizedEmail.endsWith(".com")) {
+      return res.status(400).json({
+        message: "Email must end with .com",
+      });
+    }
+
     const existingUser = await User.findOne({
       email: normalizedEmail,
     });
