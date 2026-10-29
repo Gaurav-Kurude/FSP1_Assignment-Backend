@@ -786,7 +786,7 @@ app.get("/projects/:id", authenticateToken, async (req, res) => {
 // ====================================
 // UPDATE PROJECT
 // ====================================
-app.put("/projects/:id", authenticateToken, async (req, res) => {
+app.post("/projects/:id", authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     const { name, description } = req.body;
